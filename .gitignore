@@ -18,3 +18,28 @@ tyutool_gui
 /web_ai_debug
 /ser_ai_debug
 /.venv
+
+# Web应用相关
+/venv
+/web_app/frontend/node_modules/
+/web_app/frontend/.next/
+/web_app/frontend/out/
+/web_app/frontend/build/
+/web_app/frontend/.env*
+/web_app/frontend/*.tsbuildinfo
+/web_app/frontend/next-env.d.ts
+/web_app/backend/venv/
+/web_app/backend/__pycache__/
+/web_app/backend/*.pyc
+/web_app/backend.log
+
+# 包管理文件
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# 临时和调试文件
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
