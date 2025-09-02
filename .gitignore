@@ -32,6 +32,7 @@ tyutool_gui
 /web_app/backend/__pycache__/
 /web_app/backend/*.pyc
 /web_app/backend.log
+/web_app/backend/uploads/
 
 # 包管理文件
 package-lock.json

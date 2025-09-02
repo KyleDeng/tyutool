@@ -36,18 +36,41 @@ export default function SerialAssistant() {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false)
   const [saveToFile, setSaveToFile] = useState<boolean>(false)
   const [logFilePath, setLogFilePath] = useState<string>('monitor.log')
+  const [autoScroll, setAutoScroll] = useState<boolean>(true)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const messageContainerRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    // 只在消息容器内部滚动，不影响整个页面
+    if (messageContainerRef.current) {
+      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight
+    }
   }
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    // 只有当有新消息且启用自动滚动时才滚动
+    if (messages.length > 0 && autoScroll) {
+      // 使用requestAnimationFrame确保DOM更新完成后再滚动
+      requestAnimationFrame(() => {
+        scrollToBottom()
+      })
+    }
+  }, [messages, autoScroll])
+
+  // 处理消息容器滚动事件
+  const handleMessageScroll = () => {
+    if (!messageContainerRef.current) return
+    
+    const container = messageContainerRef.current
+    const threshold = 50 // 增加阈值，让判断更宽松
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+    
+    // 如果用户滚动到底部，启用自动滚动；否则禁用
+    setAutoScroll(isAtBottom)
+  }
 
   useEffect(() => {
     // 初始化WebSocket连接
@@ -412,7 +435,15 @@ export default function SerialAssistant() {
             </button>
           </div>
         </div>
-        <div className="flex-1 p-4 bg-black text-green-400 font-mono text-sm overflow-y-auto">
+        <div 
+          className="flex-1 p-4 bg-black text-green-400 font-mono text-sm overflow-y-auto relative"
+          onScroll={(e) => {
+            const container = e.currentTarget
+            const threshold = 50 // 增加阈值
+            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+            setAutoScroll(isAtBottom)
+          }}
+        >
           {messages.map((msg, index) => {
             const formattedMsg = formatMessage(msg)
             
@@ -438,6 +469,26 @@ export default function SerialAssistant() {
             )
           })}
           <div ref={messagesEndRef} />
+          {/* 全屏模式下的自动滚动提示 */}
+          {!autoScroll && messages.length > 0 && (
+            <div className="sticky bottom-0 right-0 flex justify-end p-1">
+              <button
+                onClick={() => {
+                  setAutoScroll(true)
+                  requestAnimationFrame(() => {
+                    const container = document.querySelector('.flex-1.p-4.bg-black') as HTMLElement
+                    if (container) {
+                      container.scrollTop = container.scrollHeight
+                    }
+                  })
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded shadow-lg"
+                title="滚动到底部"
+              >
+                ↓ 滚动到底部
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -599,7 +650,11 @@ export default function SerialAssistant() {
             </button>
           </div>
         </div>
-        <div className="h-80 border border-gray-300 rounded-md p-3 bg-black text-green-400 font-mono text-sm overflow-y-auto">
+        <div 
+          ref={messageContainerRef}
+          onScroll={handleMessageScroll}
+          className="h-80 border border-gray-300 rounded-md p-3 bg-black text-green-400 font-mono text-sm overflow-y-auto relative"
+        >
           {messages.map((msg, index) => {
             const formattedMsg = formatMessage(msg)
             
@@ -625,6 +680,24 @@ export default function SerialAssistant() {
             )
           })}
           <div ref={messagesEndRef} />
+          {/* 显示自动滚动状态提示 */}
+          {!autoScroll && messages.length > 0 && (
+            <div className="sticky bottom-0 right-0 flex justify-end p-1">
+              <button
+                onClick={() => {
+                  setAutoScroll(true)
+                  // 使用requestAnimationFrame确保滚动生效
+                  requestAnimationFrame(() => {
+                    scrollToBottom()
+                  })
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded shadow-lg"
+                title="滚动到底部"
+              >
+                ↓ 滚动到底部
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

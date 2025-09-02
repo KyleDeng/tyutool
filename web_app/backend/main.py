@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import uvicorn
 import logging
 import json
@@ -14,6 +15,12 @@ from serial.tools import list_ports
 import threading
 import time
 import os
+import sys
+
+# 添加tyutool到Python路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from tyutool.flash import FlashInterface
+from flash_handler import FlashManager
 
 # 设置日志配置
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,6 +40,9 @@ app.add_middleware(
 active_connections: List[WebSocket] = []
 serial_connections: Dict[str, serial.Serial] = {}
 serial_threads: Dict[str, threading.Thread] = {}
+flash_manager = FlashManager()
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 log_config: Dict[str, Dict] = {}  # 存储每个端口的日志配置
 
 def resolve_log_file_path(user_path: str) -> str:
@@ -280,6 +290,70 @@ async def websocket_endpoint(websocket: WebSocket):
             await manager.broadcast(f"Echo: {message}")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+@app.get("/api/chips")
+async def get_chip_list():
+    """获取支持的芯片列表"""
+    try:
+        chip_list = {}
+        for chip_name in FlashInterface.get_soc_names():
+            chip_info = {
+                "name": chip_name,
+                "baudrate": FlashInterface.get_baudrate(chip_name),
+                "monitor_baudrate": FlashInterface.get_monitor_baudrate(chip_name),
+                "start_addr": FlashInterface.get_start_addr(chip_name),
+                "modules": FlashInterface.get_modules(chip_name)
+            }
+            chip_list[chip_name] = chip_info
+        return {"success": True, "chips": chip_list}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/flash/upload")
+async def upload_firmware(file: UploadFile = File(...)):
+    """上传固件文件"""
+    try:
+        file_path = os.path.join(UPLOAD_DIR, file.filename)
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        return {"success": True, "file_path": file_path, "filename": file.filename}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/flash/start")
+async def start_flash(data: dict):
+    """开始烧录"""
+    try:
+        # 如果是写入操作，需要文件路径
+        file_path = None
+        if data["operation"].lower() == "write":
+            file_path = data.get("file_path")
+            if not file_path or not os.path.exists(file_path):
+                return {"success": False, "error": "File not found"}
+        
+        result = flash_manager.start_flash(data, manager, file_path)
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/flash/stop")
+async def stop_flash(data: dict):
+    """停止烧录"""
+    try:
+        port = data["port"]
+        result = flash_manager.stop_flash(port)
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/flash/download/{filename}")
+async def download_file(filename: str):
+    """下载读取的固件文件"""
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path, filename=filename)
+    return {"error": "File not found"}
 
 @app.get("/")
 async def root():
